@@ -1,0 +1,17 @@
+# Your settings and the server's state (compose.yml, setup.py)
+.env
+compose.override.yml
+/state/
+/backups/
+/logs/
+
+# Runtime output of a run without Docker
+data/
+*.log
+__pycache__/
+*.pyc
+.venv/
+
+# Built by packaging/build_setup.py
+/build/
+/dist/

@@ -1,0 +1,7 @@
+# Only the package reaches the image.
+*
+!popn
+**/__pycache__
+**/*.pyc
+popn/data
+popn/test_*.py.orig

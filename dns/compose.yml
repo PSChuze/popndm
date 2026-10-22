@@ -1,0 +1,33 @@
+# The shared DNS resolver for game servers on this machine: OpenLobby's `dns` service,
+# started on its own when no container labelled org.openlobby.role=dns is running.
+# Setup starts it as its own project, so removing the pop'n server leaves it running
+# for other games; every game adds its names with
+#   docker exec <container> python stub.py dns-names add <key> <name>...
+#
+#   docker compose -p openlobby-dns -f dns/compose.yml up -d
+#
+# Settings come from the environment (setup passes them):
+#   POL_ADVERTISE         the address every added name is answered with
+#   POL_ADVERTISE_PUBLIC  the address internet clients get instead (with POL_DNS_PUBLIC=1)
+#   POL_DNS_PUBLIC        1 answers internet clients too, for the added names only
+#   OPENLOBBY_DNS_PORT    the host port (53 for consoles; another port only for tests)
+#   OPENLOBBY_TAG         the image version (latest)
+#   OPENLOBBY_IMAGE       another build of the same image
+services:
+  dns:
+    image: ${OPENLOBBY_IMAGE:-ghcr.io/prettyopenlobby/openlobby}:${OPENLOBBY_TAG:-latest}
+    command: ["dns"]
+    restart: unless-stopped
+    labels:
+      org.openlobby.role: dns
+    environment:
+      POL_ADVERTISE: "${POL_ADVERTISE:?set POL_ADVERTISE to this machine's address}"
+      POL_ADVERTISE_PUBLIC: "${POL_ADVERTISE_PUBLIC:-}"
+      POL_DNS_PUBLIC: "${POL_DNS_PUBLIC:-0}"
+    ports:
+      - "${POL_DNS_BIND:-0.0.0.0}:${OPENLOBBY_DNS_PORT:-53}:53/udp"
+    volumes:
+      - dns-data:/data
+
+volumes:
+  dns-data:

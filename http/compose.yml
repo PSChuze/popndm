@@ -1,0 +1,28 @@
+# The web server on port 80 that every game server on this machine shares: OpenLobby's
+# `http` service, started on its own when no container labelled org.openlobby.role=http
+# is running. Each game adds the exact host names it wants passed on to it with
+#   docker exec <container> python stub.py http-hosts add <key> http://<alias>:<port> <host>...
+#
+#   docker compose -p openlobby-http -f http/compose.yml up -d
+#
+# OPENLOBBY_TAG picks the image version (latest), OPENLOBBY_IMAGE another build of it.
+services:
+  http:
+    image: ${OPENLOBBY_IMAGE:-ghcr.io/prettyopenlobby/openlobby}:${OPENLOBBY_TAG:-latest}
+    command: ["http"]
+    restart: unless-stopped
+    labels:
+      org.openlobby.role: http
+    ports:
+      - "80:80"
+    volumes:
+      - http-data:/data
+    networks:
+      - openlobby
+
+volumes:
+  http-data:
+
+networks:
+  openlobby:
+    external: true

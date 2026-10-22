@@ -1,0 +1,111 @@
+# Builds the pop'n Server Setup program for Windows, Linux and macOS on every
+# push; a tag vX.Y.Z also publishes GitHub release vX.Y.Z with the three
+# programs, which hosts download (README.md).
+#
+# Each program carries this repository's files at that commit and unpacks
+# them on its first run. The Windows exe is built on a Windows runner.
+name: setup-program
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYINSTALLER: pyinstaller==6.11.1
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Setup tests
+        run: python -m unittest tests.test_setup tests.test_setup_flow tests.test_setup_upnp tests.test_hostsetup
+      - name: Build
+        run: |
+          set -eu
+          python -m pip install --disable-pip-version-check "$PYINSTALLER"
+          python packaging/build_setup.py --version "${GITHUB_REF_NAME}"
+          ./dist/Popn-Server-Setup.exe --help < /dev/null
+          (cd dist && sha256sum Popn-Server-Setup.exe > Popn-Server-Setup.exe.sha256)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: setup-windows
+          path: dist/Popn-Server-Setup.exe*
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (glibc 2.31, so it runs on most current distributions)
+        run: |
+          set -eu
+          docker run --rm -v "${PWD}:/src" -w /src -e GITHUB_REF_NAME python:3.12-bullseye sh -c '
+            git config --global --add safe.directory /src &&
+            python -m pip install --disable-pip-version-check --root-user-action=ignore -q '"$PYINSTALLER"' &&
+            python packaging/build_setup.py --version "$GITHUB_REF_NAME"'
+          sudo chown -R "$(id -u):$(id -g)" dist build
+          ./dist/Popn-Server-Setup-linux-x86_64 --help < /dev/null
+          (cd dist && sha256sum Popn-Server-Setup-linux-x86_64 > Popn-Server-Setup-linux-x86_64.sha256)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: setup-linux
+          path: dist/Popn-Server-Setup-linux-x86_64*
+
+  macos:
+    # Apple silicon; Intel Macs run python3 setup.py from the source instead.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          set -eu
+          python -m pip install --disable-pip-version-check "$PYINSTALLER"
+          python packaging/build_setup.py --version "${GITHUB_REF_NAME}"
+          ./dist/Popn-Server-Setup --help < /dev/null
+          # A zip keeps the program's "can run" flag through the download.
+          (cd dist && ditto -c -k Popn-Server-Setup Popn-Server-Setup-mac.zip \
+             && shasum -a 256 Popn-Server-Setup-mac.zip > Popn-Server-Setup-mac.zip.sha256)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: setup-mac
+          path: dist/Popn-Server-Setup-mac.zip*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: setup-*
+          merge-multiple: true
+          path: dist
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          # The checkout has the commit, not the annotated tag object: fetch it.
+          git fetch -q --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notes.txt
+          [ -s notes.txt ] || echo "popndm $GITHUB_REF_NAME" > notes.txt
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --title "popndm $GITHUB_REF_NAME" --notes-file notes.txt dist/*

@@ -1,0 +1,72 @@
+# The pop'n Taisen Puzzle-dama Online server: docker compose up -d
+#
+# Settings come from .env (copy .env.example, or run python setup.py).
+# The admin panel network must exist first (setup makes it):
+#   docker network create openlobby
+#
+# Host folders (POPN_STATE, default ./state):
+#   data/   accounts.json (accounts, characters, standings) and board/live.json
+#   logs/   one log per connection, events.jsonl, web.log
+name: popn
+
+x-popn: &popn
+  build: .
+  image: popndm:local
+  env_file: .env
+  restart: unless-stopped
+  volumes:
+    - ${POPN_STATE:-./state}/data:/data
+    - ${POPN_STATE:-./state}/logs:/logs
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+
+services:
+  # Login, characters, the lobby and rooms on tcp/5731 (ps2pzd1.konamionline.com),
+  # the battle relay on tcp/5730, and the admin port for an OpenLobby panel.
+  gate:
+    <<: *popn
+    command: ["python", "-u", "-m", "popn.gate"]
+    stop_grace_period: 10s
+    environment:
+      POPN_BIND: 0.0.0.0
+      POPN_PORT: "5731"
+      POPN_SVR_PORT: "5731"
+      POPN_RELAY_PORT: "5730"
+      # Reached only over the openlobby network, never published.
+      POPN_ADMIN_BIND: 0.0.0.0
+      POPN_ADMIN_PORT: "5738"
+    ports:
+      # The game dials these port numbers; they cannot be changed.
+      - "5731:5731"
+      - "5730:5730"
+    labels:
+      org.openlobby.role: game
+      org.openlobby.game.key: popn
+      org.openlobby.game.title: "pop'n Puzzle-dama Online"
+      org.openlobby.admin.url: http://popn:5738
+    networks:
+      default: {}
+      openlobby:
+        aliases: [popn]
+
+  # The in-game rankings over HTTP on tcp/5732 (ps2pzdweb.konamionline.com), read from
+  # the gate's accounts.json.
+  web:
+    <<: *popn
+    command: ["python", "-u", "-m", "popn.web"]
+    environment:
+      POPN_WEB_BIND: 0.0.0.0
+      POPN_WEB_PORT: "5732"
+    ports:
+      - "5732:5732"
+    # An OpenLobby web server on this machine passes stock installs' port 80 requests
+    # for ps2pzdweb on to this alias (setup registers it).
+    networks:
+      default: {}
+      openlobby:
+        aliases: [popn-web]
+
+networks:
+  openlobby:
+    external: true
