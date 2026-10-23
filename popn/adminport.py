@@ -9,6 +9,8 @@ Off unless POPN_ADMIN_PORT is set. The panel is then given this address and the 
   POPN_ADMIN_TOKEN       the token the panel sends (POL_ADMIN_GAME_POPN_TOKEN on the panel's side)
   POPN_ADMIN_CONTAINERS  the containers its server check covers (comma list), default this
                          compose file's (project "popn")
+  POPN_UPDATE_REPO       the GitHub repository whose releases the update notice compares this
+                         build with, default PSChuze/popndm; empty turns the notice off
 
 What the panel gets: who is in the lobby and in which room, the rooms, and the totals, all from
 live.snapshot (the same dict the boards read from board/live.json). One action, Disconnect a
@@ -36,13 +38,14 @@ and record, and whether it is in the lobby now. Handles are never matched to cha
 """
 import os
 
-from . import live, model, olpage, olport, web
+from . import live, model, olpage, olport, updates, web
 
 PORT = int(os.environ.get("POPN_ADMIN_PORT", "0") or 0)
 BIND = os.environ.get("POPN_ADMIN_BIND", "127.0.0.1")
 TOKEN = os.environ.get("POPN_ADMIN_TOKEN", "")
 CONTAINERS = [c.strip() for c in os.environ.get(
     "POPN_ADMIN_CONTAINERS", "popn-gate-1,popn-web-1").split(",") if c.strip()]
+UPDATE_REPO = os.environ.get("POPN_UPDATE_REPO", "PSChuze/popndm").strip()
 
 
 def _plural(n, word):
@@ -188,8 +191,17 @@ def rankings_page(lobby):
             "that have played are listed." % web.MAX_ROWS)
 
 
-def build(lobby, log=print):
-    """The AdminPort for the gate's LOBBY (gate.LOBBY); not started."""
+def update_check():
+    """The update notice's check (updates.py), or None with POPN_UPDATE_REPO empty."""
+    if not UPDATE_REPO:
+        return None
+    return updates.UpdateCheck(UPDATE_REPO, *updates.running())
+
+
+def build(lobby, log=print, check=None):
+    """The AdminPort for the gate's LOBBY (gate.LOBBY); not started. `check` is the update
+    notice's check, by default update_check()."""
+    check = update_check() if check is None else check
     port = olport.AdminPort(
         "popn", "pop'n Puzzle-dama Online", short="pop'n", platform="PS2 HDD",
         about="Lobby, two-player rooms and ranked matches; battles run console to console "
@@ -201,7 +213,10 @@ def build(lobby, log=print):
 
     @port.status
     def status():
-        return status_doc(lobby)
+        doc = status_doc(lobby)
+        if check:
+            doc["update"] = check.get()
+        return doc
 
     @port.player
     def player(who):

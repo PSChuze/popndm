@@ -4,6 +4,10 @@ The panel is found by its Docker label and shows its owner a one-time code. Setu
 that code with this game's key, title, admin URL and token; the panel checks the admin
 port and answers with a pairing secret, which setup keeps to tell the panel about a new
 token later.
+
+Both calls also offer the panel an updater: the server folder and the command that updates
+it (setup.py --update --yes), which the panel's deployer runs when its owner presses Update.
+The panel answers "requested" until its owner approves that on Settings > Modules.
 """
 import json
 import subprocess
@@ -15,6 +19,7 @@ ANSWERS = {400: "The panel could not reach this server's admin port",
            403: "The code is wrong, expired or already used",
            404: "The panel does not know this server",
            429: "Too many tries; wait a minute"}
+REQUESTED = "The panel's owner must approve updates from the panel on Settings > Modules."
 
 
 def _run(cmd):
@@ -51,27 +56,36 @@ def _why(status, data):
     return why.rstrip(".") + "."
 
 
-def pair(panel_url, code, key, title, admin_url, token, post=_post):
+def _approve(message, data):
+    """The message, with the approval note when the panel holds the updater for its owner."""
+    return message + (" " + REQUESTED if data.get("updater") == "requested" else "")
+
+
+def pair(panel_url, code, key, title, admin_url, token, updater=None, post=_post):
     """POST /api/pair. -> (the pairing secret or None, a sentence for the host)."""
+    body = {"code": code.strip(), "key": key, "title": title, "url": admin_url, "token": token}
+    if updater:
+        body["updater"] = updater
     try:
-        status, data = post(panel_url + "/api/pair", {"code": code.strip(), "key": key, "title": title,
-                                                      "url": admin_url, "token": token})
+        status, data = post(panel_url + "/api/pair", body)
     except OSError as e:
         return None, "The panel did not answer (%s)." % e
     if status == 200 and data.get("pairing"):
-        return data["pairing"], "Paired with the panel."
+        return data["pairing"], _approve("Paired with the panel.", data)
     return None, _why(status, data)
 
 
-def update(panel_url, key, pairing, token, admin_url="", post=_post):
-    """POST /api/pair/update after a token change. -> (ok, a sentence for the host)."""
+def update(panel_url, key, pairing, token, admin_url="", updater=None, post=_post):
+    """POST /api/pair/update after a token or folder change. -> (ok, a sentence for the host)."""
     body = {"key": key, "pairing": pairing, "token": token}
     if admin_url:
         body["url"] = admin_url
+    if updater:
+        body["updater"] = updater
     try:
         status, data = post(panel_url + "/api/pair/update", body)
     except OSError as e:
         return False, "The panel did not answer (%s)." % e
     if status == 200:
-        return True, "The panel has the new token."
+        return True, _approve("The panel has the new settings.", data)
     return False, _why(status, data)

@@ -12,6 +12,9 @@ __pycache__/
 *.pyc
 .venv/
 
+# The running build's commit, written by setup.py (popn/updates.py)
+/popn/build.json
+
 # Built by packaging/build_setup.py
 /build/
 /dist/

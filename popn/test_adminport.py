@@ -30,15 +30,16 @@ class AdminPortTest(unittest.TestCase):
         os.environ.pop("POPN_FAKE_CHAR", None)
         model.init(None)
         gate.LOBBY.clear()
-        self.saved = adminport.TOKEN, adminport.BIND, adminport.PORT
-        adminport.TOKEN, adminport.BIND, adminport.PORT = TOKEN, "127.0.0.1", 0
+        self.saved = adminport.TOKEN, adminport.BIND, adminport.PORT, adminport.UPDATE_REPO
+        # no update notice here: it would ask GitHub (test_updates.py covers it)
+        adminport.TOKEN, adminport.BIND, adminport.PORT, adminport.UPDATE_REPO = TOKEN, "127.0.0.1", 0, ""
         self.port = adminport.build(gate.LOBBY, log=lambda m: None)
         host, n = self.port.start()
         self.url = "http://127.0.0.1:%d" % n
 
     def tearDown(self):
         self.port.stop()
-        adminport.TOKEN, adminport.BIND, adminport.PORT = self.saved
+        adminport.TOKEN, adminport.BIND, adminport.PORT, adminport.UPDATE_REPO = self.saved
         for k, v in self.env.items():
             if v is None:
                 os.environ.pop(k, None)
@@ -195,6 +196,7 @@ class AdminPortTest(unittest.TestCase):
                                            {"name": "BOB", "where": "lobby"}])
         self.assertEqual(live["rooms"], [{"name": "Friday", "players": 1, "max": 2, "state": "open"}])
         self.assertEqual(live["summary"], "")
+        self.assertNotIn("update", live)
 
         self.assertEqual(self.call("/openlobby/actions/kick", {"name": "Carol"})[1],
                          {"ok": False, "msg": "Not online."})

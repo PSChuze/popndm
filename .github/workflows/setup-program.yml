@@ -2,8 +2,9 @@
 # push; a tag vX.Y.Z also publishes GitHub release vX.Y.Z with the three
 # programs, which hosts download (README.md).
 #
-# Each program carries this repository's files at that commit and unpacks
-# them on its first run. The Windows exe is built on a Windows runner.
+# Each program carries this repository's files at that commit, with the
+# commit itself in popn/build.json for the admin panel's update notice, and
+# unpacks them on its first run. The Windows exe is built on a Windows runner.
 name: setup-program
 
 on:
@@ -36,7 +37,7 @@ jobs:
         run: |
           set -eu
           python -m pip install --disable-pip-version-check "$PYINSTALLER"
-          python packaging/build_setup.py --version "${GITHUB_REF_NAME}"
+          python packaging/build_setup.py --version "${GITHUB_REF_NAME}" --commit "${GITHUB_SHA}"
           ./dist/Popn-Server-Setup.exe --help < /dev/null
           (cd dist && sha256sum Popn-Server-Setup.exe > Popn-Server-Setup.exe.sha256)
       - uses: actions/upload-artifact@v4
@@ -51,10 +52,10 @@ jobs:
       - name: Build (glibc 2.31, so it runs on most current distributions)
         run: |
           set -eu
-          docker run --rm -v "${PWD}:/src" -w /src -e GITHUB_REF_NAME python:3.12-bullseye sh -c '
+          docker run --rm -v "${PWD}:/src" -w /src -e GITHUB_REF_NAME -e GITHUB_SHA python:3.12-bullseye sh -c '
             git config --global --add safe.directory /src &&
             python -m pip install --disable-pip-version-check --root-user-action=ignore -q '"$PYINSTALLER"' &&
-            python packaging/build_setup.py --version "$GITHUB_REF_NAME"'
+            python packaging/build_setup.py --version "$GITHUB_REF_NAME" --commit "$GITHUB_SHA"'
           sudo chown -R "$(id -u):$(id -g)" dist build
           ./dist/Popn-Server-Setup-linux-x86_64 --help < /dev/null
           (cd dist && sha256sum Popn-Server-Setup-linux-x86_64 > Popn-Server-Setup-linux-x86_64.sha256)
@@ -75,7 +76,7 @@ jobs:
         run: |
           set -eu
           python -m pip install --disable-pip-version-check "$PYINSTALLER"
-          python packaging/build_setup.py --version "${GITHUB_REF_NAME}"
+          python packaging/build_setup.py --version "${GITHUB_REF_NAME}" --commit "${GITHUB_SHA}"
           ./dist/Popn-Server-Setup --help < /dev/null
           # A zip keeps the program's "can run" flag through the download.
           (cd dist && ditto -c -k Popn-Server-Setup Popn-Server-Setup-mac.zip \

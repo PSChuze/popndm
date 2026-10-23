@@ -15,15 +15,19 @@ def minutes(seconds):
 class Progress:
     """One status line per step: "Getting the server program ready (about 2 minutes):
     1 minute so far", redrawn in place, and a closing line when the step ends.
-    Without a terminal (output to a file) only the closing lines are written."""
+    Without a terminal (output to a file or a pipe) the status line is written as a line
+    of its own every `every` seconds instead, so a reader that gives up on a silent job
+    sees that a long build is still going."""
 
-    def __init__(self, out=None, clock=time.monotonic):
+    def __init__(self, out=None, clock=time.monotonic, every=120.0):
         self.out = out or sys.stdout
         self.clock = clock
+        self.every = every
         self.live = hasattr(self.out, "isatty") and self.out.isatty()
         self.title = None
         self.detail = ""
         self.started = 0.0
+        self.beat = 0.0
         self.width = 0
 
     def begin(self, title, estimate=""):
@@ -31,6 +35,7 @@ class Progress:
             return
         self.end()
         self.title, self.estimate, self.detail, self.started = title, estimate, "", self.clock()
+        self.beat = self.started
         if not self.live:
             self._write("%s%s...\n" % (title, " (%s)" % estimate if estimate else ""))
         self.tick()
@@ -47,10 +52,15 @@ class Progress:
         return text + ": " + ", ".join(parts)
 
     def tick(self):
-        if self.live and self.title:
+        if not self.title:
+            return
+        if self.live:
             text = self.line()
             self._write("\r" + text + " " * max(0, self.width - len(text)))
             self.width = len(text)
+        elif self.clock() - self.beat >= self.every:
+            self.beat = self.clock()
+            self._write(self.line() + "\n")
 
     def end(self, ok=True):
         if not self.title:
@@ -94,6 +104,8 @@ def run_logged(cmd, log, on_line=None, progress=None, cwd=None, env=None):
             break
         log.write(line)
         log.flush()
+        if progress:
+            progress.tick()
         line = line.rstrip("\r\n")
         tail = (tail + [line])[-30:]
         if on_line:

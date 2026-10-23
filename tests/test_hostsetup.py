@@ -138,12 +138,13 @@ class Panel(httpserver.BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         self.server.seen.append((self.path, body))
+        held = {"updater": "requested"} if "updater" in body else {}
         if self.path == "/api/pair" and body["code"] == "ABCD2345":
-            self._send(200, {"ok": True, "title": body["title"], "pairing": "secret-1"})
+            self._send(200, dict(held, ok=True, title=body["title"], pairing="secret-1"))
         elif self.path == "/api/pair":
             self._send(403, {"error": "That code is wrong or has expired."})
         elif body.get("pairing") == "secret-1":
-            self._send(200, {"ok": True})
+            self._send(200, dict(held, ok=True))
         else:
             self._send(403, {"error": "Wrong pairing."})
 
@@ -175,9 +176,21 @@ class Pairing(unittest.TestCase):
         self.assertEqual(self.server.seen[0], ("/api/pair", {"code": "ABCD2345", "key": "popn",
                                                              "title": "pop'n Puzzle-dama Online",
                                                              "url": "http://popn:5738", "token": "tok"}))
-        self.assertEqual(panel.update(self.url, "popn", "secret-1", "tok2"), (True, "The panel has the new token."))
+        self.assertEqual(panel.update(self.url, "popn", "secret-1", "tok2"), (True, "The panel has the new settings."))
         self.assertEqual(self.server.seen[1], ("/api/pair/update", {"key": "popn", "pairing": "secret-1",
                                                                     "token": "tok2"}))
+
+    def test_updater(self):
+        updater = {"folder": "/srv/popn", "command": ["python", "setup.py", "--update", "--yes"],
+                   "timeout_minutes": 60}
+        secret, msg = panel.pair(self.url, "ABCD2345", "popn", "t", "http://popn:5738", "tok", updater=updater)
+        self.assertEqual(secret, "secret-1")
+        self.assertEqual(msg, "Paired with the panel. " + panel.REQUESTED)
+        self.assertEqual(self.server.seen[0][1]["updater"], updater)
+        ok, msg = panel.update(self.url, "popn", "secret-1", "tok", "http://popn:5738", updater=updater)
+        self.assertTrue(ok)
+        self.assertTrue(msg.endswith("on Settings > Modules."))
+        self.assertEqual(self.server.seen[1][1]["updater"], updater)
 
     def test_refusals(self):
         self.assertEqual(panel.pair(self.url, "WRONG", "popn", "t", "u", "tok"),

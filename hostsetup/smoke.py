@@ -39,14 +39,15 @@ def ranking(host, port=5732, timeout=5.0):
     return r.status == 200 and body.endswith(b"\n")
 
 
-def check(host="127.0.0.1", gate_port=5731, web_port=5732):
-    """-> (ok, a sentence for the host)."""
+def check(host="127.0.0.1", gate_port=5731, web_port=5732, web_host=None):
+    """-> (ok, a sentence for the host). The rankings are asked on web_host when given (from
+    inside the gate's container they are another container)."""
     try:
         advertised = server_list(host, gate_port)
     except OSError as e:
         return False, "The gate on port 5731 does not answer as it should (%s)." % e
     try:
-        if not ranking(host, web_port):
+        if not ranking(web_host or host, web_port):
             return False, "The rankings on port 5732 answer, but not as the game expects."
     except OSError as e:
         return False, "The rankings on port 5732 do not answer (%s)." % e

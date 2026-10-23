@@ -155,10 +155,13 @@ class Menu(unittest.TestCase):
                 mock.patch.object(setup, "read_choices", return_value={}), \
                 mock.patch.object(setup.panellib, "find", return_value="http://127.0.0.1:8090"), \
                 mock.patch.object(setup.panellib, "update", return_value=(True, "ok")) as upd, \
+                mock.patch.object(setup, "write_choices") as saved, \
                 mock.patch("sys.stdout", io.StringIO()), answers("y"):
             setup.change_token()
         token = writes[0]["POPN_ADMIN_TOKEN"]
-        upd.assert_called_once_with("http://127.0.0.1:8090", "popn", "sec", token, "http://popn:5738")
+        upd.assert_called_once_with("http://127.0.0.1:8090", "popn", "sec", token, "http://popn:5738",
+                                    updater=setup.updater())
+        self.assertEqual(saved.call_args[0][0]["updater_folder"], setup.ROOT)
 
 
 class TooOld(unittest.TestCase):

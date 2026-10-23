@@ -176,12 +176,20 @@ state folder private.
 
 ## Updating
 
-Setup > "Update", or:
+Any of these brings the server to the newest release:
 
-```sh
-git pull
-docker compose up -d --build
-```
+- The Update button in a paired OpenLobby panel. The panel shows when a new release is out;
+  its owner first approves this server's updater on Settings > Modules.
+- Run pop'n Server Setup and choose Update.
+- In the server folder: `python setup.py --update --yes` (asks nothing).
+
+The new version is downloaded and built while the old one keeps running. Then its files
+replace the old ones, leaving `.env`, `state/`, `backups/` and `logs/` alone, and only the
+services that were running are restarted and checked. If the new version does not start,
+the old one is put back. In a git clone the update runs `git pull` instead of downloading.
+
+`POPN_UPDATE_REPO` in `.env` sets the GitHub repository the panel's update notice compares
+the server with (default `PSChuze/popndm`); empty turns the notice off.
 
 ## Development
 
