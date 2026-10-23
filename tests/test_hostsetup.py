@@ -207,8 +207,20 @@ class Pairing(unittest.TestCase):
         self.assertTrue(msg.startswith("The panel did not answer"))
 
     def test_find(self):
-        self.assertEqual(panel.find(lambda cmd: (0, "http://127.0.0.1:8090/\n")), "http://127.0.0.1:8090")
+        self.assertEqual(panel.find(lambda cmd: (0, "openlobby-panel-1\thttp://127.0.0.1:8090/\n")),
+                         "http://127.0.0.1:8090")
         self.assertIsNone(panel.find(lambda cmd: (0, "\n")))
+        self.assertIsNone(panel.find(lambda cmd: (1, "openlobby-panel-1\thttp://127.0.0.1:8090\n")))
+
+    def test_several_panels(self):
+        two = lambda cmd: (0, "panel-a\thttp://127.0.0.1:8090/\npanel-b\thttp://127.0.0.1:8091\nno-url\t\n")
+        self.assertEqual(panel.panels(two), [("panel-a", "http://127.0.0.1:8090"),
+                                             ("panel-b", "http://127.0.0.1:8091")])
+        self.assertIsNone(panel.find(two))            # never a guess
+        self.assertEqual(panel.several(panel.panels(two)),
+                         "Not paired: more than one OpenLobby admin panel is running here (panel-a at "
+                         "http://127.0.0.1:8090, panel-b at http://127.0.0.1:8091); run pop'n Server Setup "
+                         "and choose the panel.")
 
 
 class Check(unittest.TestCase):

@@ -1,6 +1,7 @@
 """Pairing with an OpenLobby admin panel running on this machine.
 
-The panel is found by its Docker label and shows its owner a one-time code. Setup sends
+The panel is found by its Docker label (with several, setup asks which one, or stops when it
+cannot ask) and shows its owner a one-time code. Setup sends
 that code with this game's key, title, admin URL and token; the panel checks the admin
 port and answers with a pairing secret, which setup keeps to tell the panel about a new
 token later.
@@ -27,12 +28,29 @@ def _run(cmd):
     return r.returncode, r.stdout or ""
 
 
-def find(run=_run):
-    """The panel's URL (its org.openlobby.panel.url label), or None."""
+def panels(run=_run):
+    """Every running panel as (container name, URL from its org.openlobby.panel.url label)."""
     code, out = run(["docker", "ps", "--filter", "label=" + ROLE, "--format",
-                     '{{.Label "org.openlobby.panel.url"}}'])
-    urls = [u.strip() for u in out.splitlines() if u.strip()] if code == 0 else []
-    return urls[0].rstrip("/") if urls else None
+                     '{{.Names}}\t{{.Label "org.openlobby.panel.url"}}'])
+    found = []
+    for line in out.splitlines() if code == 0 else []:
+        name, _, url = line.strip().partition("\t")
+        if url.strip():
+            found.append((name.strip(), url.strip().rstrip("/")))
+    return found
+
+
+def find(run=_run):
+    """The panel's URL when exactly one panel runs here, else None (setup never guesses)."""
+    found = panels(run)
+    return found[0][1] if len(found) == 1 else None
+
+
+def several(found):
+    """The sentence for a run that cannot ask which of several panels to pair with."""
+    shown = ", ".join("%s at %s" % (name, url) for name, url in found)
+    return ("Not paired: more than one OpenLobby admin panel is running here (%s); "
+            "run pop'n Server Setup and choose the panel." % shown)
 
 
 def _post(url, body, timeout=15):

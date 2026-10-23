@@ -164,6 +164,49 @@ class Menu(unittest.TestCase):
         self.assertEqual(saved.call_args[0][0]["updater_folder"], setup.ROOT)
 
 
+class SeveralPanels(unittest.TestCase):
+    TWO = [("panel-a", "http://127.0.0.1:8090"), ("panel-b", "http://127.0.0.1:8091")]
+
+    def pair(self, found, tty, *lines, choices=None):
+        out = io.StringIO()
+        with mock.patch.object(setup.panellib, "panels", return_value=found), \
+                mock.patch.object(setup, "interactive", return_value=tty), \
+                mock.patch.object(setup.panellib, "pair", return_value=("sec", "Paired with the panel.")) as pr, \
+                mock.patch.object(setup, "write_env"), mock.patch.object(setup, "write_choices"), \
+                mock.patch("sys.stdout", out), answers(*lines):
+            got = setup.pair_panel({"POPN_ADMIN_TOKEN": "tok"}, dict(choices or {}))
+        return got, pr, out.getvalue()
+
+    def test_asks_which_one(self):
+        got, pr, out = self.pair(self.TWO, True, "2", "ABCD2345")
+        self.assertTrue(got)
+        self.assertIn("1. panel-a (http://127.0.0.1:8090)", out)
+        self.assertIn("2. panel-b (http://127.0.0.1:8091)", out)
+        self.assertEqual(pr.call_args[0][0], "http://127.0.0.1:8091")
+
+    def test_none_of_them(self):
+        got, pr, _ = self.pair(self.TWO, True, "3")
+        self.assertFalse(got)
+        pr.assert_not_called()
+
+    def test_the_paired_one_is_the_default(self):
+        got, pr, _ = self.pair(self.TWO, True, "", "ABCD2345", choices={"panel": "http://127.0.0.1:8091"})
+        self.assertTrue(got)
+        self.assertEqual(pr.call_args[0][0], "http://127.0.0.1:8091")
+
+    def test_without_a_terminal_it_never_guesses(self):
+        got, pr, out = self.pair(self.TWO, False)
+        self.assertFalse(got)
+        pr.assert_not_called()
+        self.assertEqual(out.strip(), setup.panellib.several(self.TWO))
+
+    def test_one_panel_is_unchanged(self):
+        got, pr, out = self.pair(self.TWO[:1], False, "y", "ABCD2345")
+        self.assertTrue(got)
+        self.assertNotIn("1. panel-a", out)
+        self.assertEqual(pr.call_args[0][0], "http://127.0.0.1:8090")
+
+
 class TooOld(unittest.TestCase):
     def test_dns_and_http_say_update_it(self):
         out = io.StringIO()

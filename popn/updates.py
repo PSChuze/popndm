@@ -87,7 +87,9 @@ def _subject(c):
 
 
 def unknown(why):
-    return {"latest": None, "behind": None, "changes": [], "update": "unknown", "why": why, "how": HOW}
+    """An answer without a result: the panel wants objects and numbers, never null in their place."""
+    return {"latest": {"commit": None, "date": None}, "behind": 0, "changes": [], "update": "unknown",
+            "why": why, "how": HOW}
 
 
 class UpdateCheck:
@@ -118,7 +120,11 @@ class UpdateCheck:
                 answer = self.answer
         if answer is None:
             answer = unknown("still asking GitHub, try again in a moment")
-        return dict(answer, running={"commit": self.revision, "built_at": self.built_at})
+        if self.revision:
+            now = {"commit": self.revision, "built_at": self.built_at}
+        else:
+            now = {"commit": None, "built_at": None}
+        return dict(answer, running=now)
 
     def _refresh(self):
         try:

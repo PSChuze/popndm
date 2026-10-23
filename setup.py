@@ -92,6 +92,14 @@ def ask(question, default=""):
     return answer or default
 
 
+def interactive():
+    """True when someone at a terminal can answer questions."""
+    try:
+        return sys.stdin.isatty() and sys.stdout.isatty()
+    except (AttributeError, ValueError):
+        return False
+
+
 def ask_yes(question, default=True):
     answer = ask(question + (" (Y/n)" if default else " (y/N)")).lower()
     return default if not answer else answer.startswith("y")
@@ -802,15 +810,29 @@ def router_step(env, choices):
 
 def pair_panel(env, choices, asked=False):
     """Offer to manage the server from an OpenLobby panel running here."""
-    url = panellib.find()
-    if not url:
+    found = panellib.panels()
+    if not found:
         if asked:
             say("No OpenLobby admin panel is running on this computer.")
         return False
-    if not asked:
-        say()
-        if not ask_yes("An OpenLobby admin panel is running here (%s). Manage pop'n from it?" % url):
+    if len(found) > 1:
+        if not interactive():
+            say(panellib.several(found))
             return False
+        say()
+        urls = [u for _, u in found]
+        pick = ask_choice("More than one OpenLobby admin panel is running here. Manage pop'n from which one?",
+                          ["%s (%s)" % (name, u) for name, u in found] + ["None of them"],
+                          urls.index(choices["panel"]) + 1 if choices.get("panel") in urls else 1)
+        if pick > len(found):
+            return False
+        url = found[pick - 1][1]
+    else:
+        url = found[0][1]
+        if not asked:
+            say()
+            if not ask_yes("An OpenLobby admin panel is running here (%s). Manage pop'n from it?" % url):
+                return False
     if not env.get("POPN_ADMIN_TOKEN"):
         write_env({"POPN_ADMIN_TOKEN": new_token()})
         env = read_env()

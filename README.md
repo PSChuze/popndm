@@ -183,6 +183,8 @@ Any of these brings the server to the newest release:
 - Run pop'n Server Setup and choose Update.
 - In the server folder: `python setup.py --update --yes` (asks nothing).
 
+Installs of v1.0.0 must run Setup and choose Update once; after that the panel's Update button works.
+
 The new version is downloaded and built while the old one keeps running. Then its files
 replace the old ones, leaving `.env`, `state/`, `backups/` and `logs/` alone, and only the
 services that were running are restarted and checked. If the new version does not start,

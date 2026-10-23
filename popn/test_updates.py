@@ -60,7 +60,19 @@ def check(github, revision=RUNNING, clock=None):
     return c.get(wait=5)
 
 
+UNKNOWN_LATEST = {"commit": None, "date": None}
+
+
 class UpdateNotice(unittest.TestCase):
+    def assertUnknown(self, got, running=RUNNING):
+        self.assertEqual(got["update"], "unknown")
+        self.assertEqual((got["latest"], got["behind"], got["changes"]), (UNKNOWN_LATEST, 0, []))
+        if running:
+            self.assertEqual(got["running"], {"commit": running, "built_at": "2024-02-01T00:00:00Z"})
+        else:
+            self.assertEqual(got["running"], {"commit": None, "built_at": None})
+        self.assertTrue(got["why"])
+
     def test_current(self):
         got = check(GitHub())
         self.assertEqual(got["update"], "current")
@@ -88,16 +100,36 @@ class UpdateNotice(unittest.TestCase):
 
     def test_offline(self):
         got = check(GitHub(down=True))
-        self.assertEqual(got["update"], "unknown")
+        self.assertUnknown(got)
         self.assertEqual(got["why"], "GitHub did not answer (OSError)")
-        self.assertEqual(got["running"]["commit"], RUNNING)
 
     def test_refused_and_unknown_commit(self):
-        self.assertIn("too many requests", check(GitHub(status=403))["why"])
-        self.assertEqual(check(GitHub(status=404))["why"], "GitHub has no release of PSChuze/popndm")
+        got = check(GitHub(status=403))
+        self.assertUnknown(got)
+        self.assertIn("too many requests", got["why"])
+        got = check(GitHub(status=404))
+        self.assertUnknown(got)
+        self.assertEqual(got["why"], "GitHub has no release of PSChuze/popndm")
         got = check(GitHub(), revision="")
-        self.assertEqual(got["update"], "unknown")
+        self.assertUnknown(got, running="")
         self.assertIn("build.json", got["why"])
+
+    def test_not_from_the_public_repository(self):
+        got = check(GitHub(), revision="b" * 40)
+        self.assertUnknown(got, running="b" * 40)
+        self.assertEqual(got["why"], "this build is not from the public repository")
+
+    def test_bad_repo_and_a_crashing_check(self):
+        c = updates.UpdateCheck("not a repo", RUNNING, "2024-02-01T00:00:00Z", fetch=GitHub(), clock=Clock())
+        got = c.get(wait=5)
+        self.assertUnknown(got)
+        self.assertIn("owner/name", got["why"])
+
+        def broken(url):
+            raise KeyError("x")
+        got = check(broken)
+        self.assertUnknown(got)
+        self.assertEqual(got["why"], "the check failed (KeyError)")
 
     def test_answers_are_kept(self):
         github, clock = GitHub(), Clock()
@@ -119,6 +151,8 @@ class UpdateNotice(unittest.TestCase):
         c = updates.UpdateCheck("PSChuze/popndm", RUNNING, fetch=slow)
         got = c.get(wait=0.01)
         self.assertEqual((got["update"], got["why"]), ("unknown", "still asking GitHub, try again in a moment"))
+        self.assertEqual((got["latest"], got["behind"], got["changes"]), (UNKNOWN_LATEST, 0, []))
+        self.assertEqual(got["running"], {"commit": RUNNING, "built_at": ""})
         gate_open.set()
         c.thread and c.thread.join(5)
         self.assertEqual(c.get()["why"], "GitHub did not answer (OSError)")
